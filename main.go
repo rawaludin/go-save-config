@@ -26,42 +26,17 @@ var (
 	configuration Configuration
 )
 
-func init() {
-	// setup location
-	// NOTE: ignoring error from user.Current
-	usr, _ := user.Current()
-	configPath = path.Join(usr.HomeDir, ".saveConfig.json")
-
-	if _, err := os.Stat(configPath); err != nil {
-		if os.IsNotExist(err) {
-			setupAddress()
-		} else {
-			log.Fatal(err)
-		}
-	}
-
-	configFile, err := os.Open(configPath)
-	fmt.Println("Configuration loaded from " + configPath)
-	defer configFile.Close()
-	decoder := json.NewDecoder(configFile)
-	err = decoder.Decode(&configuration)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func setupAddress() (configFile *os.File) {
+func setupAddress() {
 	fmt.Println("To determine your location, we use Google Geocoding API for server. Please get your API Key at https://console.developers.google.com/apis/credentials/wizard?api=geocoding_backend")
 	fmt.Print("Type your API Key: ")
-	ApiKey := ""
-	fmt.Scan(&ApiKey)
+	var apiKey string
+	fmt.Scan(&apiKey)
 
 	fmt.Print("Type your location: ")
-	address := ""
+	var address string
 	fmt.Scan(&address)
 
-	c, err := maps.NewClient(maps.WithAPIKey(ApiKey))
+	c, err := maps.NewClient(maps.WithAPIKey(apiKey))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -75,10 +50,14 @@ func setupAddress() (configFile *os.File) {
 		log.Fatal(err)
 	}
 
+	if len(locations) == 0 {
+		log.Fatal("no locations found")
+	}
+
 	location := locations[0]
 	if len(locations) > 1 {
 		for i, location := range locations {
-			fmt.Fprintf(os.Stdout, "%d) %s\n", i+1, location.FormattedAddress)
+			fmt.Printf("%d) %s\n", i+1, location.FormattedAddress)
 		}
 
 		choice := 0
@@ -86,6 +65,7 @@ func setupAddress() (configFile *os.File) {
 			fmt.Printf("\rWhich is your address? ")
 			_, err := fmt.Scanf("%d", &choice)
 			if err != nil {
+				fmt.Printf("Please type %d to %d", 1, len(locations))
 				choice = 0
 			}
 		}
@@ -93,22 +73,50 @@ func setupAddress() (configFile *os.File) {
 		location = locations[choice-1]
 	}
 
-	configuration := Configuration{location.FormattedAddress, location.Geometry.Location.Lat, location.Geometry.Location.Lng, ApiKey}
+	configuration := Configuration{
+		Address: location.FormattedAddress,
+		Lat:     location.Geometry.Location.Lat,
+		Lng:     location.Geometry.Location.Lng,
+		ApiKey:  apiKey}
 
-	// NOTE: ignoring error from json.Marshal
 	data, _ := json.Marshal(configuration)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	err = ioutil.WriteFile(configPath, []byte(data), 0666)
+	err = ioutil.WriteFile(configPath, data, 0660)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println("Configuration saved to " + configPath)
-
-	return
 }
 
 func main() {
+	// setup location
+	// NOTE: ignoring error from user.Current
+	usr, _ := user.Current()
+	configPath = path.Join(usr.HomeDir, ".saveConfig.json")
+
+	if _, err := os.Stat(configPath); err != nil {
+		if !os.IsNotExist(err) {
+			log.Fatal(err)
+		}
+		setupAddress()
+	}
+
+	configFile, err := os.Open(configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Configuration loaded from " + configPath)
+	defer configFile.Close()
+	decoder := json.NewDecoder(configFile)
+	err = decoder.Decode(&configuration)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	fmt.Printf("Api Key \t: %s\n", configuration.ApiKey)
 	fmt.Printf("Address \t: %s\n", configuration.Address)
 	fmt.Printf("Lat \t\t: %f\n", configuration.Lat)
