@@ -79,7 +79,7 @@ func setupAddress() {
 		Lng:     location.Geometry.Location.Lng,
 		ApiKey:  apiKey}
 
-	data, _ := json.Marshal(configuration)
+	data, err := json.Marshal(configuration)
 	if err != nil {
 		log.Fatal(err)
 	}
